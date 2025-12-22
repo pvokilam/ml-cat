@@ -1,4 +1,5 @@
 import { CategoryResult } from '../types';
+import { categoryEmojis } from '../config/categoryEmojis';
 
 interface CategoryDisplayProps {
   result: CategoryResult | null;
@@ -38,6 +39,7 @@ export function CategoryDisplay({ result, isLoading }: CategoryDisplayProps) {
   }
 
   const color = categoryColors[result.category] || categoryColors.Other;
+  const emoji = categoryEmojis[result.category] || categoryEmojis.Other;
   const confidencePercent = Math.round(result.confidence * 100);
 
   return (
@@ -46,7 +48,7 @@ export function CategoryDisplay({ result, isLoading }: CategoryDisplayProps) {
         className="category-badge"
         style={{ backgroundColor: color }}
       >
-        {result.category}
+        {emoji} {result.category}
       </div>
       <div className="confidence">
         Confidence: {confidencePercent}%

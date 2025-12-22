@@ -15,11 +15,23 @@ function App() {
   const [isLoading, setIsLoading] = useState(false);
   const [isModelLoading, setIsModelLoading] = useState(true);
   const [items, setItems] = useState<ItemEmbedding[]>([]);
+  const [theme, setTheme] = useState<'light' | 'dark'>(() => {
+    // Check localStorage first, then system preference
+    const saved = localStorage.getItem('theme') as 'light' | 'dark' | null;
+    if (saved) return saved;
+    return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  });
   const [performance, setPerformance] = useState<{
     embeddingTime?: number;
     searchTime?: number;
     totalTime?: number;
   }>({});
+
+  // Apply theme to document
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', theme);
+    localStorage.setItem('theme', theme);
+  }, [theme]);
 
   // Load embeddings on mount
   useEffect(() => {
@@ -80,10 +92,10 @@ function App() {
       const startTime = window.performance.now();
 
       try {
-        // Run classification and suggestions in parallel
+        // Get suggestions (synchronous) and classify (async) in parallel
         const [categoryResult, suggestions] = await Promise.all([
           classify(debouncedInput, items),
-          getSuggestions(debouncedInput, items, 5),
+          Promise.resolve(getSuggestions(debouncedInput, items, 5)),
         ]);
 
         const totalTime = window.performance.now() - startTime;
@@ -112,8 +124,15 @@ function App() {
     setDebouncedInput(suggestion);
   }, []);
 
+  const toggleTheme = useCallback(() => {
+    setTheme(prev => prev === 'light' ? 'dark' : 'light');
+  }, []);
+
   return (
     <div className="app">
+      <button className="theme-toggle" onClick={toggleTheme} aria-label="Toggle theme">
+        {theme === 'light' ? '🌙' : '☀️'}
+      </button>
       <header className="app-header">
         <h1>Grocery ML Prototype</h1>
         <p className="subtitle">

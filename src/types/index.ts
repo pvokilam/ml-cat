@@ -33,6 +33,5 @@ export interface Suggestion {
   name: string;
   category: Category;
   similarity: number;
-  isPrefixMatch?: boolean;
 }
 

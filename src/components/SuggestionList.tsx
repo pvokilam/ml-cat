@@ -1,4 +1,5 @@
 import { Suggestion } from '../types';
+import { categoryEmojis } from '../config/categoryEmojis';
 
 interface SuggestionListProps {
   suggestions: Suggestion[];
@@ -43,10 +44,9 @@ export function SuggestionList({
           <span className="suggestion-name">
             {highlightText(suggestion.name, inputValue)}
           </span>
-          <span className="suggestion-category">{suggestion.category}</span>
-          {suggestion.isPrefixMatch && (
-            <span className="suggestion-badge">Prefix</span>
-          )}
+          <span className="suggestion-category">
+            {categoryEmojis[suggestion.category]} {suggestion.category}
+          </span>
         </div>
       ))}
     </div>

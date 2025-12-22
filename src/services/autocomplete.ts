@@ -1,8 +1,4 @@
-import { encode } from './embeddingService';
-import { findNearest } from './nearestNeighbor';
 import { ItemEmbedding, Suggestion } from '../types';
-
-const PREFIX_THRESHOLD = 3; // Use prefix search for inputs shorter than this
 
 /**
  * Check if text starts with prefix (case-insensitive)
@@ -12,72 +8,64 @@ function startsWith(text: string, prefix: string): boolean {
 }
 
 /**
+ * Check if text contains the search term (case-insensitive)
+ */
+function contains(text: string, search: string): boolean {
+  return text.toLowerCase().includes(search.toLowerCase());
+}
+
+/**
  * Get auto-complete suggestions for user input
+ * Uses text-based matching (prefix and contains) - embeddings don't make sense for autocomplete
+ * Embeddings are better suited for classification after the user finishes typing
+ * 
  * @param text User input text (can be partial)
  * @param items Precomputed item embeddings
  * @param limit Maximum number of suggestions to return
  * @returns Array of suggestions sorted by relevance
  */
-export async function getSuggestions(
+export function getSuggestions(
   text: string,
   items: ItemEmbedding[],
   limit: number = 5
-): Promise<Suggestion[]> {
+): Suggestion[] {
   if (!text.trim()) {
     return [];
   }
 
-  const trimmedText = text.trim();
+  const trimmedText = text.trim().toLowerCase();
 
-  // For short inputs, use prefix search
-  if (trimmedText.length < PREFIX_THRESHOLD) {
-    const prefixMatches = items
-      .filter(item => startsWith(item.name, trimmedText))
-      .slice(0, limit)
-      .map(item => ({
-        name: item.name,
-        category: item.category,
-        similarity: 1.0, // Perfect match for prefix
-        isPrefixMatch: true,
-      }));
+  // Always use prefix search for autocomplete - it's what users expect
+  // Find exact prefix matches first
+  const prefixMatches = items
+    .filter(item => startsWith(item.name, trimmedText))
+    .slice(0, limit)
+    .map(item => ({
+      name: item.name,
+      category: item.category,
+      similarity: 1.0, // Perfect match for prefix
+    }));
 
+  // If we have enough prefix matches, return them
+  if (prefixMatches.length >= limit) {
     return prefixMatches;
   }
 
-  // For longer inputs, use embedding similarity
-  let queryVector: number[];
-  try {
-    queryVector = await encode(trimmedText);
-  } catch (error) {
-    // Fallback: use prefix search when model fails
-    const prefixMatches = items
-      .filter(item => startsWith(item.name, trimmedText))
-      .slice(0, limit)
-      .map(item => ({
-        name: item.name,
-        category: item.category,
-        similarity: 0.9, // High similarity for prefix matches
-        isPrefixMatch: true,
-      }));
-    return prefixMatches;
-  }
-  const neighbors = findNearest(queryVector, items, limit * 2); // Get more candidates
+  // If we don't have enough prefix matches, supplement with contains matches
+  // (items that contain the search term but don't start with it)
+  const remainingSlots = limit - prefixMatches.length;
+  const containsMatches = items
+    .filter(item => {
+      const lowerName = item.name.toLowerCase();
+      return contains(lowerName, trimmedText) && !startsWith(lowerName, trimmedText);
+    })
+    .slice(0, remainingSlots)
+    .map(item => ({
+      name: item.name,
+      category: item.category,
+      similarity: 0.8, // High similarity for contains matches
+    }));
 
-  // Boost items that match the prefix
-  const suggestions: Suggestion[] = neighbors.map(neighbor => {
-    const isPrefixMatch = startsWith(neighbor.item.name, trimmedText);
-    return {
-      name: neighbor.item.name,
-      category: neighbor.item.category,
-      similarity: isPrefixMatch
-        ? Math.min(1.0, neighbor.similarity + 0.1) // Boost prefix matches
-        : neighbor.similarity,
-      isPrefixMatch,
-    };
-  });
-
-  // Sort by similarity (with prefix boost) and take top N
-  suggestions.sort((a, b) => b.similarity - a.similarity);
-  return suggestions.slice(0, limit);
+  return [...prefixMatches, ...containsMatches];
 }
 
