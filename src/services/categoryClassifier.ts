@@ -1,15 +1,12 @@
-import { encode } from './embeddingService';
-import { findNearest } from './nearestNeighbor';
-import { ItemEmbedding, CategoryResult, Category } from '../types';
-import { MODEL_CONFIG } from '../config/modelConfig';
+import { CategoryResult, Category, ItemEmbedding } from '../types';
 
-const CONFIDENCE_THRESHOLD = MODEL_CONFIG.confidenceThreshold;
-const K_NEIGHBORS = MODEL_CONFIG.kNeighbors;
+// API endpoint for category classification
+const API_URL = '/api/category';
 
 /**
- * Classify a grocery item into a category using nearest neighbor majority vote
+ * Classify a grocery item into a category using server-side API
  * @param text User input text
- * @param items Precomputed item embeddings
+ * @param items Precomputed item embeddings (kept for fallback, but not used for classification)
  * @returns Classification result with category, confidence, and neighbors
  */
 export async function classify(
@@ -24,12 +21,26 @@ export async function classify(
     };
   }
 
-  // Generate embedding for input text
-  let queryVector: number[];
   try {
-    queryVector = await encode(text);
+    // Call server-side classification endpoint
+    const response = await fetch(API_URL, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ text }),
+    });
+
+    if (!response.ok) {
+      const error = await response.json().catch(() => ({ error: 'Unknown error' }));
+      throw new Error(error.error || `API request failed: ${response.status}`);
+    }
+
+    const result = await response.json();
+    return result as CategoryResult;
   } catch (error) {
-    // Fallback: use prefix matching to find category
+    // Fallback: use prefix matching to find category if server is unavailable
+    console.warn('Server classification failed, using fallback:', error);
     const prefixMatches = items.filter(item => 
       item.name.toLowerCase().startsWith(text.toLowerCase())
     );
@@ -62,52 +73,5 @@ export async function classify(
       neighbors: [],
     };
   }
-
-  // Find nearest neighbors
-  const neighbors = findNearest(queryVector, items, K_NEIGHBORS);
-
-  if (neighbors.length === 0) {
-    return {
-      category: 'Other',
-      confidence: 0,
-      neighbors: [],
-    };
-  }
-
-  // Calculate average similarity (confidence)
-  const avgSimilarity =
-    neighbors.reduce((sum, n) => sum + n.similarity, 0) / neighbors.length;
-
-  // If confidence is too low, return Other
-  if (avgSimilarity < CONFIDENCE_THRESHOLD) {
-    return {
-      category: 'Other',
-      confidence: avgSimilarity,
-      neighbors,
-    };
-  }
-
-  // Majority vote: count categories from neighbors
-  const categoryCounts: Record<string, number> = {};
-  for (const neighbor of neighbors) {
-    const cat = neighbor.item.category;
-    categoryCounts[cat] = (categoryCounts[cat] || 0) + 1;
-  }
-
-  // Find category with most votes
-  let maxCount = 0;
-  let predictedCategory: Category = 'Other';
-  for (const [category, count] of Object.entries(categoryCounts)) {
-    if (count > maxCount) {
-      maxCount = count;
-      predictedCategory = category as Category;
-    }
-  }
-
-  return {
-    category: predictedCategory,
-    confidence: avgSimilarity,
-    neighbors,
-  };
 }
 

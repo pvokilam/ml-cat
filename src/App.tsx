@@ -22,8 +22,6 @@ function App() {
     return window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
   });
   const [performance, setPerformance] = useState<{
-    embeddingTime?: number;
-    searchTime?: number;
     totalTime?: number;
   }>({});
 
@@ -33,19 +31,19 @@ function App() {
     localStorage.setItem('theme', theme);
   }, [theme]);
 
-  // Load embeddings on mount
+  // Load grocery items for autocomplete (text matching only)
   useEffect(() => {
-    const loadEmbeddings = async () => {
+    const loadItems = async () => {
       try {
         const data = await import('./data/groceryEmbeddings.json');
         const loadedItems = data.default as ItemEmbedding[];
         setItems(loadedItems);
       } catch (error) {
-        console.error('Failed to load embeddings. Please run: npm run precompute', error);
+        console.error('Failed to load grocery items. Please run: npm run precompute', error);
         setItems([]);
       }
     };
-    loadEmbeddings();
+    loadItems();
   }, []);
 
   // Debounce input
@@ -62,12 +60,7 @@ function App() {
     const checkApi = async () => {
       try {
         const { isModelLoaded } = await import('./services/embeddingService');
-        const loaded = await isModelLoaded();
-        if (loaded) {
-          // Test with a dummy encode to ensure it works
-          const { encode } = await import('./services/embeddingService');
-          await encode('test');
-        }
+        await isModelLoaded();
         setIsModelLoading(false);
       } catch (error) {
         console.error('API server not available:', error);
@@ -92,7 +85,7 @@ function App() {
       const startTime = window.performance.now();
 
       try {
-        // Get suggestions (synchronous) and classify (async) in parallel
+        // Get suggestions (client-side text matching) and classify (server-side) in parallel
         const [categoryResult, suggestions] = await Promise.all([
           classify(debouncedInput, items),
           Promise.resolve(getSuggestions(debouncedInput, items, 5)),
@@ -103,10 +96,8 @@ function App() {
         setCategoryResult(categoryResult);
         setSuggestions(suggestions);
 
-        // Estimate performance (embedding time is the bottleneck)
+        // Track total request time
         setPerformance({
-          embeddingTime: totalTime * 0.8, // Rough estimate
-          searchTime: totalTime * 0.2,
           totalTime,
         });
       } catch (error) {
@@ -136,7 +127,7 @@ function App() {
       <header className="app-header">
         <h1>Grocery ML Prototype</h1>
         <p className="subtitle">
-          Category classification and auto-complete using on-device ML
+          Category classification and auto-complete using server-side ML
         </p>
       </header>
 
@@ -170,18 +161,8 @@ function App() {
                 {performance.totalTime && (
                   <div className="performance">
                     <div className="performance-item">
-                      Total: {performance.totalTime.toFixed(1)}ms
+                      Response time: {performance.totalTime.toFixed(1)}ms
                     </div>
-                    {performance.embeddingTime && (
-                      <div className="performance-item">
-                        Embedding: {performance.embeddingTime.toFixed(1)}ms
-                      </div>
-                    )}
-                    {performance.searchTime && (
-                      <div className="performance-item">
-                        Search: {performance.searchTime.toFixed(1)}ms
-                      </div>
-                    )}
                   </div>
                 )}
               </div>
