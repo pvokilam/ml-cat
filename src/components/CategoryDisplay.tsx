@@ -1,5 +1,5 @@
 import { CategoryResult } from '../types';
-import { categoryEmojis } from '../config/categoryEmojis';
+import { categoryEmojis, formatCategoryName } from '../config/categoryEmojis';
 
 interface CategoryDisplayProps {
   result: CategoryResult | null;
@@ -48,20 +48,31 @@ export function CategoryDisplay({ result, isLoading }: CategoryDisplayProps) {
         className="category-badge"
         style={{ backgroundColor: color }}
       >
-        {emoji} {result.category}
+        {emoji} {formatCategoryName(result.category)}
       </div>
       <div className="confidence">
         Confidence: {confidencePercent}%
       </div>
       {result.neighbors.length > 0 && (
-        <div className="neighbors">
-          <div className="neighbors-label">Similar items:</div>
-          <div className="neighbors-list">
-            {result.neighbors.slice(0, 3).map((neighbor, idx) => (
-              <span key={idx} className="neighbor-item">
-                {neighbor.item.name} ({Math.round(neighbor.similarity * 100)}%)
-              </span>
-            ))}
+        <div className="similar-items-section">
+          <div className="similar-items-label">Similar Items (used for voting):</div>
+          <div className="similar-items-list">
+            {result.neighbors.slice(0, 5).map((neighbor, idx) => {
+              const neighborColor = categoryColors[neighbor.item.category] || categoryColors.Other;
+              const neighborEmoji = categoryEmojis[neighbor.item.category] || categoryEmojis.Other;
+              const similarityPercent = Math.round(neighbor.similarity * 100);
+              return (
+                <div key={idx} className="similar-item">
+                  <div className="similar-item-header">
+                    <span className="similar-item-name">{neighbor.item.name}</span>
+                    <span className="similar-item-similarity">{similarityPercent}%</span>
+                  </div>
+                  <div className="similar-item-category" style={{ backgroundColor: neighborColor }}>
+                    {neighborEmoji} {formatCategoryName(neighbor.item.category)}
+                  </div>
+                </div>
+              );
+            })}
           </div>
         </div>
       )}

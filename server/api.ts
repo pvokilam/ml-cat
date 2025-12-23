@@ -135,6 +135,16 @@ async function classifyText(text: string): Promise<CategoryResult> {
 
   const confidence = neighbors[0].similarity;
 
+  // Top-match priority: if the best neighbor is very strong, return its category directly
+  const TOP_MATCH_THRESHOLD = 0.95;
+  if (confidence > TOP_MATCH_THRESHOLD) {
+    return {
+      category: neighbors[0].item.category,
+      confidence,
+      neighbors,
+    };
+  }
+
   // If confidence is too low, return Other
   if (confidence < MODEL_CONFIG.confidenceThreshold) {
     return {
