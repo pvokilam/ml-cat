@@ -273,28 +273,78 @@ app.post('/api/category', async (req, res) => {
   }
 });
 
-// Serve static files in production
-if (isProduction) {
-  const distPath = join(__dirname, '../dist');
-  if (existsSync(distPath)) {
-    app.use(express.static(distPath));
-    
-    // Handle React routing - serve index.html for all non-API routes
-    app.get('*', (req, res, next) => {
-      // Don't serve index.html for API routes
-      if (req.path.startsWith('/api')) {
-        return next();
-      }
-      res.sendFile(join(distPath, 'index.html'));
-    });
-  } else {
-    console.warn('Dist folder not found. Static files will not be served.');
+// Serve static files (always check, not just in production)
+// Check multiple possible dist paths
+const possibleDistPaths = [
+  join(__dirname, '../dist'),
+  join(process.cwd(), 'dist'),
+  join(__dirname, '../../dist'),
+];
+
+let distPath = '';
+for (const path of possibleDistPaths) {
+  if (existsSync(path)) {
+    distPath = path;
+    break;
   }
+}
+
+// Store distPath for logging
+const finalDistPath = distPath;
+
+if (distPath) {
+  console.log(`Serving static files from: ${distPath}`);
+  app.use(express.static(distPath));
+  
+  // Handle React routing - serve index.html for all non-API routes
+  // This must be the last route handler
+  app.get('*', (req, res) => {
+    // Don't serve index.html for API routes
+    if (req.path.startsWith('/api')) {
+      return res.status(404).json({ error: 'Not found' });
+    }
+    const indexPath = join(distPath, 'index.html');
+    if (existsSync(indexPath)) {
+      res.sendFile(indexPath, (err) => {
+        if (err) {
+          console.error('Error serving index.html:', err);
+          res.status(500).send('Error loading application');
+        }
+      });
+    } else {
+      console.error(`index.html not found at: ${indexPath}`);
+      res.status(500).send('Application files not found');
+    }
+  });
+} else {
+  console.warn('Dist folder not found. Static files will not be served.');
+  console.warn('Checked paths:', possibleDistPaths);
+  console.warn('Current working directory:', process.cwd());
+  console.warn('__dirname:', __dirname);
+  
+  // Fallback: return error for non-API routes
+  app.get('*', (req, res) => {
+    if (!req.path.startsWith('/api')) {
+      res.status(500).send('Application not built. Please run: npm run build');
+    } else {
+      res.status(404).json({ error: 'Not found' });
+    }
+  });
 }
 
 app.listen(PORT, () => {
   console.log(`Server running on port ${PORT}`);
   console.log(`Environment: ${isProduction ? 'production' : 'development'}`);
+  console.log(`NODE_ENV: ${process.env.NODE_ENV || 'not set'}`);
+  console.log(`Current working directory: ${process.cwd()}`);
+  console.log(`__dirname: ${__dirname}`);
+  if (finalDistPath) {
+    console.log(`✓ Serving static files from: ${finalDistPath}`);
+    console.log(`✓ index.html exists: ${existsSync(join(finalDistPath, 'index.html'))}`);
+  } else {
+    console.error(`✗ Dist folder not found!`);
+    console.error(`Checked paths: ${possibleDistPaths.join(', ')}`);
+  }
   console.log(`Model loading in background...`);
 });
 
