@@ -1,17 +1,33 @@
 import express from 'express';
 import cors from 'cors';
 import { pipeline } from '@xenova/transformers';
-import { readFileSync } from 'fs';
-import { join } from 'path';
+import { readFileSync, existsSync } from 'fs';
+import { join, dirname } from 'path';
+import { fileURLToPath } from 'url';
 import { MODEL_CONFIG } from '../src/config/modelConfig.js';
 import type { ItemEmbedding, Category, CategoryResult, Neighbor } from '../src/types/index.js';
 
-const app = express();
-const PORT = 3001;
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
 
-// Enable CORS for Vite dev server
+const app = express();
+const PORT = process.env.PORT || 3001;
+const isProduction = process.env.NODE_ENV === 'production';
+
+// Enable CORS
+const allowedOrigins = isProduction 
+  ? [process.env.RAILWAY_PUBLIC_DOMAIN, process.env.RAILWAY_STATIC_URL].filter(Boolean)
+  : ['http://localhost:5173'];
+
 app.use(cors({
-  origin: 'http://localhost:5173',
+  origin: (origin, callback) => {
+    // Allow requests with no origin (like mobile apps or curl requests)
+    if (!origin || allowedOrigins.includes(origin)) {
+      callback(null, true);
+    } else {
+      callback(null, true); // Allow all origins for demo
+    }
+  },
   credentials: true,
 }));
 
@@ -69,11 +85,30 @@ function loadEmbeddings() {
   }
 
   try {
-    const embeddingsPath = join(process.cwd(), 'src/data/groceryEmbeddings.json');
+    // Try multiple paths for different environments
+    const possiblePaths = [
+      join(process.cwd(), 'src/data/groceryEmbeddings.json'),
+      join(__dirname, '../src/data/groceryEmbeddings.json'),
+      join(process.cwd(), 'dist/src/data/groceryEmbeddings.json'),
+      join(__dirname, '../../src/data/groceryEmbeddings.json'),
+    ];
+
+    let embeddingsPath = '';
+    for (const path of possiblePaths) {
+      if (existsSync(path)) {
+        embeddingsPath = path;
+        break;
+      }
+    }
+
+    if (!embeddingsPath) {
+      throw new Error(`Embeddings file not found. Tried: ${possiblePaths.join(', ')}`);
+    }
+
     const data = JSON.parse(readFileSync(embeddingsPath, 'utf-8'));
     groceryEmbeddings = Array.isArray(data) ? data : data.default || [];
     embeddingsLoaded = true;
-    console.log(`Loaded ${groceryEmbeddings.length} grocery embeddings`);
+    console.log(`Loaded ${groceryEmbeddings.length} grocery embeddings from ${embeddingsPath}`);
     return groceryEmbeddings;
   } catch (error) {
     console.error('Failed to load grocery embeddings:', error);
@@ -238,8 +273,28 @@ app.post('/api/category', async (req, res) => {
   }
 });
 
+// Serve static files in production
+if (isProduction) {
+  const distPath = join(__dirname, '../dist');
+  if (existsSync(distPath)) {
+    app.use(express.static(distPath));
+    
+    // Handle React routing - serve index.html for all non-API routes
+    app.get('*', (req, res, next) => {
+      // Don't serve index.html for API routes
+      if (req.path.startsWith('/api')) {
+        return next();
+      }
+      res.sendFile(join(distPath, 'index.html'));
+    });
+  } else {
+    console.warn('Dist folder not found. Static files will not be served.');
+  }
+}
+
 app.listen(PORT, () => {
-  console.log(`API server running on http://localhost:${PORT}`);
+  console.log(`Server running on port ${PORT}`);
+  console.log(`Environment: ${isProduction ? 'production' : 'development'}`);
   console.log(`Model loading in background...`);
 });
 

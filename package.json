@@ -7,7 +7,11 @@
     "dev": "vite",
     "dev:api": "tsx watch server/api.ts",
     "dev:all": "concurrently \"npm run dev\" \"npm run dev:api\"",
-    "build": "tsc && vite build",
+    "build": "npm run build:client && npm run build:server && npm run copy:data",
+    "build:client": "vite build",
+    "build:server": "tsc -p tsconfig.server.json",
+    "copy:data": "node -e \"const fs=require('fs');const path=require('path');const src='src/data/groceryEmbeddings.json';const dest='dist/src/data/groceryEmbeddings.json';if(fs.existsSync(src)){fs.mkdirSync(path.dirname(dest),{recursive:true});fs.copyFileSync(src,dest);console.log('Copied embeddings file');}else{console.warn('Embeddings file not found');}\"",
+    "start": "node dist/server/api.js",
     "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
     "preview": "vite preview",
     "precompute": "tsx scripts/precomputeEmbeddings.ts"
